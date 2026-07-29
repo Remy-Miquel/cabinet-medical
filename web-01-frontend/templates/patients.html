@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titre %} — Patients{% endblock %}
+{% block contenu %}
+<div class="carte">
+  <h2>Patients {% if role == 'secretariat' %}(vue administrative){% else %}(vue complète){% endif %}</h2>
+  <table>
+    <tr>
+      <th>Patient</th><th>Téléphone</th><th>Mutuelle</th><th>RDV</th>
+      {% if role == 'medecin' %}<th>Diagnostics</th>{% endif %}
+    </tr>
+    {% for p in patients %}
+    <tr>
+      <td>{{ p.patient }}</td>
+      <td>{{ p.telephone }}</td>
+      <td>{{ p.mutuelle }}</td>
+      <td>{{ p.prochain_rdv or "—" }}</td>
+      {% if role == 'medecin' %}<td>{{ p.diagnostics }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

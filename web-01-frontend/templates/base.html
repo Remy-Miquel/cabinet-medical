@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cabinet Médical{% block titre %}{% endblock %}</title>
+  <style>
+    :root { --vert:#0f766e; --gris:#f1f5f9; --texte:#1e293b; --rouge:#dc2626; }
+    * { box-sizing:border-box; }
+    body { font-family:system-ui,-apple-system,sans-serif; margin:0;
+           background:var(--gris); color:var(--texte); }
+    header { background:var(--vert); color:#fff; padding:1rem 1.5rem;
+             display:flex; justify-content:space-between; align-items:center; }
+    header a { color:#fff; text-decoration:none; margin-left:1rem; }
+    main { max-width:760px; margin:2rem auto; padding:0 1rem; }
+    .carte { background:#fff; border-radius:10px; padding:1.5rem;
+             box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:1rem; }
+    .carte h2 { margin-top:0; color:var(--vert); }
+    .clinique { border-left:4px solid var(--rouge); padding-left:1rem; }
+    .admin { border-left:4px solid var(--vert); padding-left:1rem; }
+    label { display:block; margin:.6rem 0 .2rem; font-weight:600; }
+    input { width:100%; padding:.6rem; border:1px solid #cbd5e1;
+            border-radius:6px; font-size:1rem; }
+    button { background:var(--vert); color:#fff; border:none; padding:.7rem 1.4rem;
+             border-radius:6px; font-size:1rem; cursor:pointer; margin-top:1rem; }
+    .flash { background:#fef2f2; color:var(--rouge); padding:.8rem 1rem;
+             border-radius:6px; margin-bottom:1rem; }
+    .badge { font-size:.75rem; background:#fff; color:var(--vert);
+             padding:.2rem .6rem; border-radius:20px; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { text-align:left; padding:.6rem; border-bottom:1px solid #e2e8f0; }
+    .btn-lien { display:inline-block; margin-top:.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>🩺 Cabinet Médical</strong>
+    <nav>
+      {% if session.get('username') %}
+        <span class="badge">{{ session.get('role') }}</span>
+        <a href="{{ url_for('index') }}">Accueil</a>
+        <a href="{{ url_for('logout') }}">Déconnexion</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    {% block contenu %}{% endblock %}
+  </main>
+</body>
+</html>

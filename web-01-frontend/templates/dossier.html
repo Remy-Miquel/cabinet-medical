@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block titre %} — Mon dossier{% endblock %}
+{% block contenu %}
+<div class="carte">
+  <h2>Dossier de {{ dossier.patient }}</h2>
+  <div class="admin">
+    <h3>Informations administratives</h3>
+    <p>Téléphone : {{ dossier.telephone }}</p>
+    <p>Mutuelle : {{ dossier.mutuelle }}</p>
+    <p>Prochain RDV : {{ dossier.prochain_rdv or "aucun" }}</p>
+  </div>
+  {% if dossier.antecedents is defined %}
+  <div class="clinique">
+    <h3>Informations médicales</h3>
+    <p>Antécédents : {{ dossier.antecedents }}</p>
+    <p>Diagnostics : {{ dossier.diagnostics }}</p>
+    <p>Traitements : {{ dossier.traitements }}</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block titre %} — Accueil{% endblock %}
+{% block contenu %}
+<div class="carte">
+  <h2>Bienvenue</h2>
+  <p>Vous êtes connecté en tant que <strong>{{ role }}</strong>.</p>
+  {% if role == 'patient' %}
+    <a class="btn-lien" href="{{ url_for('mon_dossier') }}">📋 Consulter mon dossier</a>
+  {% elif role in ['secretariat', 'medecin'] %}
+    <a class="btn-lien" href="{{ url_for('patients') }}">👥 Liste des patients</a>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block titre %} — Accès refusé{% endblock %}
+{% block contenu %}
+<div class="carte">
+  <h2 style="color:var(--rouge)">Accès refusé</h2>
+  <p>{{ message }}</p>
+  <a class="btn-lien" href="{{ url_for('index') }}">Retour à l'accueil</a>
+</div>
+{% endblock %}
