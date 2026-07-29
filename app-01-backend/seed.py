@@ -1,50 +1,55 @@
 """
-APP-01 — Peuplement initial de la base (comptes de démonstration)
-À exécuter une fois après la création de la base : python3 seed.py
-
-En production ces comptes seraient créés via une procédure d'enrôlement
-sécurisée, pas par un script. Ici c'est pour tester le RBAC.
+APP-01 — Peuplement de démonstration (schéma Approche 1)
+À lancer une fois : python3 seed.py
+Crée 3 comptes (médecin, secrétaire, patient) + 1 dossier.
 """
 from datetime import datetime
-from database import SessionLocal, init_db, User, DossierMedical
+from database import (
+    SessionLocal, init_db,
+    Role, Utilisateur, Medecin, Secretaire, Patient, Dossier,
+)
 from auth import hash_password
 
 init_db()
 db = SessionLocal()
 
-# Évite les doublons si on relance le script
-if db.query(User).first():
-    print("Base déjà peuplée, rien à faire.")
-    db.close()
-    raise SystemExit
+# Rôles (idempotent)
+roles = {}
+for nom in ["medecin", "secretariat", "patient"]:
+    r = db.query(Role).filter(Role.nom_role == nom).first()
+    if not r:
+        r = Role(nom_role=nom)
+        db.add(r); db.commit(); db.refresh(r)
+    roles[nom] = r
 
-# --- Comptes ---
-medecin = User(username="dr_martin", password_hash=hash_password("medecin123"),
-               role="medecin", full_name="Dr Martin")
-secretaire = User(username="secretaire", password_hash=hash_password("secret123"),
-                  role="secretariat", full_name="Secrétariat")
-patient = User(username="patient_durand", password_hash=hash_password("patient123"),
-               role="patient", full_name="Jean Durand")
+if db.query(Utilisateur).first():
+    print("Utilisateurs déjà présents, seed ignoré.")
+    db.close(); raise SystemExit
 
-db.add_all([medecin, secretaire, patient])
-db.commit()
-db.refresh(patient)
+# --- Médecin ---
+u_med = Utilisateur(nom="Martin", prenom="Paul", email="dr.martin@cabinet.fr",
+                    mot_de_pass_hash=hash_password("medecin123"), role_id=roles["medecin"].id)
+db.add(u_med); db.commit(); db.refresh(u_med)
+db.add(Medecin(utilisateur_id=u_med.id, specialite="Généraliste", numero_rpps="10101010101"))
 
-# --- Dossier du patient (admin + clinique séparés) ---
-dossier = DossierMedical(
-    patient_id=patient.id,
-    telephone="06 12 34 56 78",
-    mutuelle="MGEN",
-    prochain_rdv=datetime(2026, 8, 15, 10, 30),
-    antecedents="Hypertension légère depuis 2022.",
-    diagnostics="Contrôle tensionnel de routine.",
-    traitements="Amlodipine 5mg, 1/jour.",
-)
-db.add(dossier)
-db.commit()
-db.close()
+# --- Secrétaire ---
+u_sec = Utilisateur(nom="Durand", prenom="Sophie", email="secretaire@cabinet.fr",
+                    mot_de_pass_hash=hash_password("secret123"), role_id=roles["secretariat"].id)
+db.add(u_sec); db.commit(); db.refresh(u_sec)
+db.add(Secretaire(utilisateur_id=u_sec.id, poste="Accueil"))
+
+# --- Patient + dossier ---
+u_pat = Utilisateur(nom="Durand", prenom="Jean", email="jean.durand@mail.fr",
+                    mot_de_pass_hash=hash_password("patient123"), role_id=roles["patient"].id)
+db.add(u_pat); db.commit(); db.refresh(u_pat)
+pat = Patient(utilisateur_id=u_pat.id, telephone="0612345678",
+              mutuelle="MGEN", prochain_rdv=datetime(2026, 8, 15, 10, 30))
+db.add(pat); db.commit(); db.refresh(pat)
+db.add(Dossier(patient_id=pat.id, antecedents="Hypertension légère depuis 2022.",
+               diagnostics="Contrôle tensionnel de routine.", traitements="Amlodipine 5mg, 1/jour."))
+db.commit(); db.close()
 
 print("Base peuplée :")
-print("  médecin      -> dr_martin / medecin123   (accès complet)")
-print("  secrétariat  -> secretaire / secret123   (administratif seulement)")
-print("  patient      -> patient_durand / patient123 (son dossier)")
+print("  médecin      -> dr.martin@cabinet.fr / medecin123")
+print("  secrétariat  -> secretaire@cabinet.fr / secret123")
+print("  patient      -> jean.durand@mail.fr / patient123")

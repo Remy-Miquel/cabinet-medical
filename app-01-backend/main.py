@@ -1,17 +1,17 @@
 """
 APP-01 — API back-end du cabinet médical (FastAPI)
-Cabinet médical — dossier technique sections 5.3.3 / 5.3.4
-
-Cette API est INTERNE : elle n'est jamais exposée directement aux patients.
-Seul WEB-01 (front en DMZ) l'appelle, sur un port filtré par pfSense.
-Elle porte le RBAC : chaque endpoint vérifie le rôle avant de répondre.
+Schéma Approche 1 (table par rôle). API interne, appelée uniquement par WEB-01.
+Porte le RBAC : chaque endpoint vérifie le rôle avant de répondre.
 """
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
-from database import get_db, init_db, User, DossierMedical
+from database import (
+    get_db, init_db,
+    Utilisateur, Role, Medecin, Secretaire, Patient, Dossier,
+)
 from auth import (
     hash_password, verify_password, create_access_token,
     decode_token, require_role,
@@ -25,11 +25,9 @@ def startup():
     init_db()
 
 
-# ---------- Schémas de réponse (Pydantic) ----------
-# On expose des vues DIFFÉRENTES selon le rôle : c'est la minimisation
-# des données (art. 5 RGPD) appliquée au niveau de l'API.
+# ---------- Schémas de réponse (vues différenciées par rôle) ----------
 
-class DossierAdministratif(BaseModel):
+class VueAdministrative(BaseModel):
     """Vue secrétariat : PAS de contenu clinique."""
     patient: str
     telephone: Optional[str]
@@ -37,11 +35,16 @@ class DossierAdministratif(BaseModel):
     prochain_rdv: Optional[str]
 
 
-class DossierComplet(DossierAdministratif):
-    """Vue médecin : administratif + clinique (art. 9 RGPD)."""
+class VueComplete(VueAdministrative):
+    """Vue médecin/patient : administratif + clinique."""
     antecedents: Optional[str]
     diagnostics: Optional[str]
     traitements: Optional[str]
+
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
 
 
 class LoginResult(BaseModel):
@@ -52,96 +55,77 @@ class LoginResult(BaseModel):
 
 # ---------- Authentification ----------
 
-class LoginBody(BaseModel):
-    username: str
-    password: str
-
-
 @app.post("/token", response_model=LoginResult)
 def login(body: LoginBody, db: Session = Depends(get_db)):
-    """Login : renvoie un JWT portant le rôle. Point d'entrée de tout accès."""
-    user = db.query(User).filter(User.username == body.username).first()
-    if not user or not verify_password(body.password, user.password_hash):
+    """Login par email. Renvoie un JWT portant le rôle."""
+    user = db.query(Utilisateur).filter(Utilisateur.email == body.email).first()
+    if not user or not user.actif or not verify_password(body.password, user.mot_de_pass_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants incorrects",
         )
-    token = create_access_token(user.username, user.role, user.id)
-    return LoginResult(access_token=token, token_type="bearer", role=user.role)
+    role = user.role_nom
+    token = create_access_token(user.email, role, user.id)
+    return LoginResult(access_token=token, token_type="bearer", role=role)
 
 
 # ---------- Endpoints métier avec RBAC ----------
 
-@app.get("/mon-dossier", response_model=DossierComplet)
+@app.get("/mon-dossier", response_model=VueComplete)
 def mon_dossier(payload: dict = Depends(require_role("patient")),
                 db: Session = Depends(get_db)):
-    """
-    PATIENT : voit UNIQUEMENT son propre dossier, complet.
-    Le uid vient du token — impossible de demander le dossier d'un autre.
-    """
-    dossier = db.query(DossierMedical).filter(
-        DossierMedical.patient_id == payload["uid"]
-    ).first()
-    if not dossier:
-        raise HTTPException(404, "Aucun dossier trouvé")
-    return _to_complet(dossier)
+    """PATIENT : uniquement son propre dossier."""
+    patient = db.query(Patient).filter(Patient.utilisateur_id == payload["uid"]).first()
+    if not patient:
+        raise HTTPException(404, "Profil patient introuvable")
+    return _vue_complete(patient)
 
 
 @app.get("/patients")
 def liste_patients(payload: dict = Depends(require_role("secretariat", "medecin")),
                    db: Session = Depends(get_db)):
-    """
-    SECRÉTARIAT + MÉDECIN : liste des patients.
-    Mais la VUE diffère selon le rôle (voir ci-dessous).
-    """
-    dossiers = db.query(DossierMedical).all()
+    """SECRÉTARIAT + MÉDECIN : liste, mais vue selon le rôle."""
+    patients = db.query(Patient).all()
     if payload["role"] == "secretariat":
-        # Secrétariat : administratif seulement (moindre privilège)
-        return [_to_admin(d) for d in dossiers]
-    # Médecin : accès complet
-    return [_to_complet(d) for d in dossiers]
+        return [_vue_admin(p) for p in patients]      # admin seulement
+    return [_vue_complete(p) for p in patients]       # médecin : complet
 
 
-@app.get("/patient/{patient_id}", response_model=DossierComplet)
+@app.get("/patient/{patient_id}", response_model=VueComplete)
 def dossier_patient(patient_id: int,
                     payload: dict = Depends(require_role("medecin")),
                     db: Session = Depends(get_db)):
-    """
-    MÉDECIN UNIQUEMENT : dossier clinique complet d'un patient donné.
-    Le secrétariat ne peut PAS atteindre cet endpoint (403).
-    """
-    dossier = db.query(DossierMedical).filter(
-        DossierMedical.patient_id == patient_id
-    ).first()
-    if not dossier:
-        raise HTTPException(404, "Dossier introuvable")
-    return _to_complet(dossier)
+    """MÉDECIN UNIQUEMENT : dossier clinique complet d'un patient."""
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(404, "Patient introuvable")
+    return _vue_complete(patient)
 
 
 @app.get("/health")
 def health():
-    """Sonde de disponibilité (utilisée par WEB-01 et la supervision)."""
     return {"status": "ok", "service": "APP-01"}
 
 
-# ---------- Helpers de projection (RBAC → vue) ----------
+# ---------- Projections RBAC ----------
 
-def _to_admin(d: DossierMedical) -> DossierAdministratif:
-    return DossierAdministratif(
-        patient=d.patient.full_name,
-        telephone=d.telephone,
-        mutuelle=d.mutuelle,
-        prochain_rdv=str(d.prochain_rdv) if d.prochain_rdv else None,
+def _vue_admin(p: Patient) -> VueAdministrative:
+    return VueAdministrative(
+        patient=p.utilisateur.nom_complet if p.utilisateur else f"patient#{p.id}",
+        telephone=p.telephone,
+        mutuelle=p.mutuelle,
+        prochain_rdv=str(p.prochain_rdv) if p.prochain_rdv else None,
     )
 
 
-def _to_complet(d: DossierMedical) -> DossierComplet:
-    return DossierComplet(
-        patient=d.patient.full_name,
-        telephone=d.telephone,
-        mutuelle=d.mutuelle,
-        prochain_rdv=str(d.prochain_rdv) if d.prochain_rdv else None,
-        antecedents=d.antecedents,
-        diagnostics=d.diagnostics,
-        traitements=d.traitements,
+def _vue_complete(p: Patient) -> VueComplete:
+    d = p.dossier
+    return VueComplete(
+        patient=p.utilisateur.nom_complet if p.utilisateur else f"patient#{p.id}",
+        telephone=p.telephone,
+        mutuelle=p.mutuelle,
+        prochain_rdv=str(p.prochain_rdv) if p.prochain_rdv else None,
+        antecedents=d.antecedents if d else None,
+        diagnostics=d.diagnostics if d else None,
+        traitements=d.traitements if d else None,
     )
