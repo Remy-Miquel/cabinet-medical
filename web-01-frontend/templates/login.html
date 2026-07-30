@@ -4,10 +4,11 @@
 <div class="carte">
   <h2>Connexion</h2>
   <form method="post">
-    <label>Identifiant</label>
-    <input name="username" required autofocus>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Email</label>
+    <input name="email" type="email" required autofocus autocomplete="username">
     <label>Mot de passe</label>
-    <input name="password" type="password" required>
+    <input name="password" type="password" required autocomplete="current-password">
     <button type="submit">Se connecter</button>
   </form>
 </div>

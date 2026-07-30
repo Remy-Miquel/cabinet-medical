@@ -12,6 +12,9 @@
     header { background:var(--vert); color:#fff; padding:1rem 1.5rem;
              display:flex; justify-content:space-between; align-items:center; }
     header a { color:#fff; text-decoration:none; margin-left:1rem; }
+    header form { display:inline; margin-left:1rem; }
+    header button.lien { background:none; border:none; color:#fff; cursor:pointer;
+                         font-size:1rem; text-decoration:underline; padding:0; }
     main { max-width:760px; margin:2rem auto; padding:0 1rem; }
     .carte { background:#fff; border-radius:10px; padding:1.5rem;
              box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:1rem; }
@@ -36,10 +39,13 @@
   <header>
     <strong>🩺 Cabinet Médical</strong>
     <nav>
-      {% if session.get('username') %}
+      {% if session.get('email') %}
         <span class="badge">{{ session.get('role') }}</span>
         <a href="{{ url_for('index') }}">Accueil</a>
-        <a href="{{ url_for('logout') }}">Déconnexion</a>
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="lien">Déconnexion</button>
+        </form>
       {% endif %}
     </nav>
   </header>
